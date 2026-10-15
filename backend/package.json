@@ -1,0 +1,21 @@
+{
+  "type": "module",
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "cd gateway && npm run dev",
+    "dev:auth": "cd services/auth && npm run dev",
+    "dev:project": "cd services/project && npm run dev",
+    "dev:file": "cd services/file && npm run dev",
+    "dev:gateway": "cd gateway && npm run dev",
+    "dev:ai": "cd services/ai && npm run dev",
+    "dev:terminal":"cd services/terminal && npm run dev",
+    "dev:payment": "cd services/payment && npm run dev",
+    "clear-cache": "node shared/redis/clearCache.js"
+  },
+  "dependencies": {
+    "ioredis": "^6.0.0"
+  }
+}
