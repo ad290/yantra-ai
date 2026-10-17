@@ -1,4 +1,6 @@
 import type { ChatEventHandler, ChatInputType, ChatResponseType, ChatStreamEvent } from "../types";
+import { refreshService } from "../../auth/services/auth.api.service";
+import { getAccessToken } from "../../auth/token";
 
 type StreamEventData =
     | ChatResponseType
@@ -43,16 +45,31 @@ const parseEvent = (eventText: string): ParsedEvent | null => {
         }
     }
 }
-export const chat = async ({ projectId, history, message }: ChatInputType, onEvent?: ChatEventHandler): Promise<ChatResponseType> => {
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_API_URL}/ai/chat`, {
+const postChatStream = (body: string, accessToken: string | null) => {
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+    };
+    if (accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return fetch(`${import.meta.env.VITE_BACKEND_API_URL}/ai/chat`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-        },
+        headers,
         credentials: "include",
-        body: JSON.stringify({ projectId, history, message }),
-    })
+        body,
+    });
+};
+
+export const chat = async ({ projectId, history, message }: ChatInputType, onEvent?: ChatEventHandler): Promise<ChatResponseType> => {
+    const body = JSON.stringify({ projectId, history, message });
+    let response = await postChatStream(body, getAccessToken());
+    if (response.status === 401) {
+        const refreshed = await refreshService();
+        if (refreshed) {
+            response = await postChatStream(body, refreshed);
+        }
+    }
     if (!response.ok) {
         let errorMessage = "AI Request failed";
         try {
