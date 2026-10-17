@@ -1,65 +1,69 @@
 # Real-Time AI Code Editor
 
-A browser-based IDE with Monaco editor, live HTML preview, integrated terminal, and an AI coding agent that can create and modify project files. Built with a React frontend and Node.js microservices (API gateway, auth, projects, files, AI, terminal, payments).
+Browser-based IDE with Monaco, live preview, integrated terminal, and an AI agent that can read and edit project files.
 
-## Features
+## Tech stack
 
-- **Auth** — Dev login (fixed user `aditya`) with Redis-backed sessions; JWT planned later
-- **Projects** — Dashboard, starred projects, CRUD
-- **Editor** — Monaco, tabs, save to MongoDB-backed virtual filesystem
-- **Preview** — Renders `html` / `css` / `js` from the project tree
-- **Terminal** — xterm.js + Socket.IO + `node-pty` (project synced to a local workspace folder)
-- **AI chat** — LangGraph agent (OpenRouter) with file tools; SSE streaming
-- **Credits & plans** — Usage credits; optional Razorpay checkout on `/plans`
+| Layer | Technologies |
+|-------|----------------|
+| **Frontend** | React, TypeScript, Vite, Tailwind CSS, Redux Toolkit, React Query, Monaco Editor, xterm.js, Socket.IO client |
+| **Backend** | Node.js, Express, microservices behind an API gateway |
+| **Data** | MongoDB (projects & virtual filesystem), Redis (sessions & cache) |
+| **AI** | LangGraph agent, OpenRouter API, SSE streaming |
+| **Terminal** | Socket.IO, `node-pty` (syncs project to a local workspace) |
+| **Payments** | Razorpay (optional, `/plans`) |
 
-## Prerequisites
+## How it works
 
-- **Node.js** 18+ (20+ recommended)
-- **MongoDB** (local or [Atlas](https://www.mongodb.com/cloud/atlas))
-- **Docker** (optional, for Redis via `docker compose`)
-- **OpenRouter API key** ([openrouter.ai](https://openrouter.ai)) for AI chat
-- **Razorpay** keys (optional, only for `/plans`)
+1. **Login** — User signs in via the auth service; the gateway stores a Redis-backed session cookie.
+2. **Dashboard** — Project service lists and manages projects in MongoDB.
+3. **Editor** — File service loads/saves files; Monaco edits content in the browser.
+4. **Preview** — Frontend builds HTML/CSS/JS from the project tree for a live preview.
+5. **Terminal** — Client connects directly to the terminal service; files sync from the file service into a workspace folder.
+6. **AI chat** — Gateway proxies to the AI service; the agent streams responses and uses tools to create or update files (credits enforced).
 
-## Quick start
-
-### 1. Clone and enter the project
-
-```bash
-cd Real-Time-AI-Code-Editor   # repository root (this folder)
+```mermaid
+flowchart LR
+  Browser --> Gateway
+  Gateway --> Auth
+  Gateway --> Project
+  Gateway --> File
+  Gateway --> AI
+  Gateway --> Payment
+  Browser --> Terminal
+  Auth --> Redis
+  Project --> MongoDB
+  File --> MongoDB
 ```
 
-If you cloned into a parent folder that also contains another copy of this repo, use the directory that has `frontend/` and `backend/` side by side.
+**Gateway routes:** `/api/auth/*`, `/api/me`, `/api/project/*`, `/api/file/*`, `/api/ai/*`, `/api/payment/*`  
+**Direct:** Terminal WebSocket (`VITE_TERMINAL_SERVICE_URL`, not through the gateway).
 
-### 2. Redis
+## Setup
+
+**Requirements:** Node.js 18+ (20+ recommended), MongoDB, Docker (for Redis), OpenRouter API key for AI. Razorpay keys only if you use billing.
+
+### 1. Redis
 
 ```bash
 cd backend
 docker compose up -d
 ```
 
-### 3. Environment files
+### 2. Environment
 
-Each service loads `.env` from **its own directory**. Copy the matching `.env.example` to `.env` in each folder:
+Copy `.env.example` → `.env` in each service folder and in `frontend/`:
 
-| Location | Copy from |
-|----------|-----------|
-| `backend/gateway/` | `backend/gateway/.env.example` |
-| `backend/services/auth/` | `backend/services/auth/.env.example` |
-| `backend/services/project/` | `backend/services/project/.env.example` |
-| `backend/services/file/` | `backend/services/file/.env.example` |
-| `backend/services/ai/` | `backend/services/ai/.env.example` |
-| `backend/services/terminal/` | `backend/services/terminal/.env.example` |
-| `backend/services/payment/` | `backend/services/payment/.env.example` |
-| `frontend/` | `frontend/.env.example` |
+- `backend/gateway/`
+- `backend/services/auth/`, `project/`, `file/`, `ai/`, `terminal/`, `payment/`
+- `frontend/`
 
-Use the same `MONGODB_URL` and port URLs across services as in the examples.
+Use the same `MONGODB_URL` and service URLs as in the examples. Set `OPENROUTER_API_KEY` in `backend/services/ai/.env`.
 
-### 4. Install dependencies
+### 3. Install
 
 ```bash
-# Shared Redis client (used by gateway, auth, project via shared/)
 cd backend && npm install
-
 cd gateway && npm install
 cd ../services/auth && npm install
 cd ../project && npm install
@@ -67,13 +71,12 @@ cd ../file && npm install
 cd ../ai && npm install
 cd ../terminal && npm install
 cd ../payment && npm install
-
 cd ../../frontend && npm install
 ```
 
-### 5. Run services
+### 4. Run
 
-Start **Redis**, then run each process in a separate terminal (from `backend/`):
+From `backend/`, start each service in its own terminal:
 
 ```bash
 npm run dev:auth
@@ -82,7 +85,7 @@ npm run dev:file
 npm run dev:ai
 npm run dev:payment
 npm run dev:terminal
-npm run dev:gateway    # or: npm run dev
+npm run dev:gateway
 ```
 
 Frontend:
@@ -91,55 +94,46 @@ Frontend:
 cd frontend && npm run dev
 ```
 
-Open **http://localhost:5173/login** and click **Let's start** to sign in as **aditya**. `FRONTEND_URL` in gateway/terminal `.env` must match this origin for CORS and cookies.
+Open **http://localhost:5173/login**, click **Let's start** (dev user **aditya**). Set `FRONTEND_URL` in gateway and terminal `.env` to match the frontend origin.
 
-### 6. Clear Redis cache (optional)
+| Service | Default port |
+|---------|----------------|
+| Gateway | 8000 |
+| Auth | 8011 (or 8001) |
+| Project | 8002 |
+| File | 8003 |
+| AI | 8004 |
+| Payment | 8005 |
+| Terminal | 8006 |
+| Frontend | 5173 |
 
-```bash
-cd backend && npm run clear-cache
-```
+Optional: `cd backend && npm run clear-cache` to flush Redis.
 
-## Default ports
+Do not commit `.env` files.
 
-| Service   | Port | Env variable    |
-|-----------|------|-----------------|
-| Gateway   | 8000 | `PORT`          |
-| Auth      | 8011 | `AUTH_PORT` (8001 if free; change if another app uses it) |
-| Project   | 8002 | `PROJECT_PORT`  |
-| File      | 8003 | `FILE_PORT`     |
-| AI        | 8004 | `AI_PORT`       |
-| Payment   | 8005 | `PAYMENT_PORT`  |
-| Terminal  | 8006 | `TERMINAL_PORT` |
-| Redis     | 6379 | `REDIS_URL`     |
-| Frontend  | 5173 | (Vite default)  |
+## Contributing
 
-The terminal WebSocket is **not** proxied through the gateway; the frontend connects directly via `VITE_TERMINAL_SERVICE_URL`.
+Thanks for helping improve this project.
 
-## API overview (via gateway)
+1. **Fork** the repository and create a branch from `main` (e.g. `feat/short-description` or `fix/issue-name`).
+2. **Make focused changes** — one logical change per PR when possible.
+3. **Test locally** — Redis, MongoDB, gateway, the services you touched, and the frontend should run without errors.
+4. **Follow existing style** — match naming and patterns in the codebase; run `npm run lint` in `frontend/` if you changed UI code.
+5. **Keep secrets out** — never commit API keys, `.env`, or credentials.
 
-| Prefix | Service  | Notes |
-|--------|----------|--------|
-| `/api/auth/*` | Auth | Login/logout (public proxy) |
-| `/api/me` | Gateway | Current user (session) |
-| `/api/project/*` | Project | Requires session |
-| `/api/file/*` | File | Requires session |
-| `/api/ai/*` | AI | Chat SSE; requires session |
-| `/api/payment/*` | Payment | Razorpay orders; requires session |
+## Pull requests
 
-## Troubleshooting
+1. Push your branch to your fork and open a **Pull Request** against `main`.
+2. Use a clear **title** and a short **description**: what changed and why.
+3. Link any related **issue** if one exists.
+4. Wait for review; address feedback with new commits on the same branch.
+5. After merge, delete the branch if you no longer need it.
 
-- **Login fails / 401 on API** — Check Redis, `FRONTEND_URL`, and that the gateway is running. Cookies use `credentials: true` on the client.
-- **`POST /api/auth/login` 404** — Auth service not reachable: run `npm run dev:auth` and ensure `AUTH_SERVICE_URL` in `gateway/.env` matches `AUTH_PORT` in `services/auth/.env`. If port 8001 is taken (e.g. another Python app), use **8011** for auth and update gateway/ai/payment `AUTH_SERVICE_URL`.
-- **AI errors** — Set `OPENROUTER_API_KEY` in `backend/services/ai/.env`. Users need credits (default 100 on signup).
-- **Terminal disconnected** — Set `VITE_TERMINAL_SERVICE_URL` and run `npm run dev:terminal`. File service must be up for project sync.
-- **`ioredis` not found** — Run `npm install` in `backend/` (root), not only in sub-services.
-## Production notes
-
-- Set `NODE_ENV=production` on services; auth cookies use `secure` and `sameSite: none` in production.
-- Use managed MongoDB, Redis, and HTTPS for gateway and frontend.
-- Replace dev login with real JWT (or other) auth before shipping.
-- Do not commit `.env`.
+If something is unclear before you start, open an issue or ask in the PR draft — small, reviewable PRs are easier to merge.
 
 ## License
 
-See repository license if present; otherwise treat as the author’s project.
+Copyright © 2026 **Aditya Pawar** — **Yantra AI**. All rights reserved.
+
+See [LICENSE](LICENSE) for full terms.
+
